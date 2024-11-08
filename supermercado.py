@@ -91,15 +91,16 @@ class SimulacionSupermercado:
         bar_colors = ['lightgrey'] * self.num_cajas
         bars = ax1.bar(range(self.num_cajas), [0] * self.num_cajas, color=bar_colors)
         
-        # Configuración del gráfico de cajas
-        ax1.set_ylim(0, self.simulation_time)
+        # Ajustar el límite superior del eje y del gráfico de cajas
+        max_tiempo_restante = np.max(self.estados_cajas)  # Tomar el valor máximo de tiempos restantes de las cajas
+        ax1.set_ylim(0, max(10, max_tiempo_restante))  # Limitar el eje y a 10 si es menor que max_tiempo_restante
         ax1.set_title('Estado de las Cajas')
         ax1.set_xlabel('Número de Caja')
         ax1.set_ylabel('Tiempo Restante de Atención (minutos)')
         
         # Inicializar línea para la cola
         line, = ax2.plot([], [], 'b-', label='Longitud de la Cola')
-        ax2.set_xlim(0, self.simulation_time)
+        ax2.set_xlim(0, min(self.simulation_time, np.max(self.longitudes_cola_tiempo) + 1))  # Ajustar el límite superior del eje x
         ax2.set_ylim(0, max(self.longitudes_cola_tiempo) + 1)
         ax2.set_title('Longitud de la Cola')
         ax2.set_xlabel('Tiempo (minutos)')
