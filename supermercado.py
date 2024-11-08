@@ -2,6 +2,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 from collections import deque
+from matplotlib.animation import FuncAnimation
+import matplotlib.patches as patches
 
 class SimulacionSupermercado:
     def __init__(self, lambda_rate, mu_rate, num_cajas, simulation_time):
@@ -25,8 +27,19 @@ class SimulacionSupermercado:
         cajas_ocupadas = np.zeros(self.num_cajas)
         cola = deque()
         
+        # Guardar estados para animación
+        self.estados_cajas = []
+        self.tiempos = []
+        self.longitudes_cola_tiempo = []
+        tiempo_actual = 0
+        
         # Procesar cada llegada
         for tiempo_llegada in llegadas:
+            # Guardar estado actual para animación
+            self.estados_cajas.append(cajas_ocupadas.copy())
+            self.tiempos.append(tiempo_llegada)
+            self.longitudes_cola_tiempo.append(len(cola))
+            
             # Liberar cajas que ya terminaron
             cajas_disponibles = cajas_ocupadas <= tiempo_llegada
             cajas_ocupadas[cajas_disponibles] = tiempo_llegada
@@ -39,7 +52,6 @@ class SimulacionSupermercado:
                 cliente_cola = cola.popleft()
                 caja = np.argmin(cajas_ocupadas)
                 tiempo_espera = tiempo_llegada - cliente_cola
-                # Limitar el tiempo de servicio entre 1 y 5 minutos
                 tiempo_servicio = min(max(np.random.exponential(1/self.mu_rate), 1), 5)
                 
                 tiempos_cola.append(tiempo_espera)
@@ -51,7 +63,6 @@ class SimulacionSupermercado:
             # Atender cliente actual si hay caja disponible
             if np.any(cajas_ocupadas <= tiempo_llegada):
                 caja = np.argmin(cajas_ocupadas)
-                # Limitar el tiempo de servicio entre 1 y 5 minutos
                 tiempo_servicio = min(max(np.random.exponential(1/self.mu_rate), 1), 5)
                 tiempos_cola.append(0)
                 tiempos_sistema.append(tiempo_servicio)
@@ -62,12 +73,74 @@ class SimulacionSupermercado:
             
             longitudes_cola.append(len(cola))
         
+        # Guardar último estado
+        self.estados_cajas.append(cajas_ocupadas.copy())
+        self.tiempos.append(tiempo_llegada)
+        self.longitudes_cola_tiempo.append(len(cola))
+        
         return (np.array(tiempos_cola), np.array(tiempos_sistema), 
                 np.array(longitudes_cola), np.array(tiempos_servicio),
                 np.array(utilizacion_cajas))
 
-    def mostrar_resultados(self, tiempos_cola, tiempos_sistema, longitudes_cola, 
-                          tiempos_servicio, utilizacion_cajas):
+    def animar_cajas(self):
+        # Crear figura con dos subplots
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8), height_ratios=[3, 1])
+        fig.suptitle('Simulación del Supermercado', fontsize=14)
+        
+        # Inicializar barras para las cajas
+        bar_colors = ['lightgrey'] * self.num_cajas
+        bars = ax1.bar(range(self.num_cajas), [0] * self.num_cajas, color=bar_colors)
+        
+        # Configuración del gráfico de cajas
+        ax1.set_ylim(0, self.simulation_time)
+        ax1.set_title('Estado de las Cajas')
+        ax1.set_xlabel('Número de Caja')
+        ax1.set_ylabel('Tiempo Restante de Atención (minutos)')
+        
+        # Inicializar línea para la cola
+        line, = ax2.plot([], [], 'b-', label='Longitud de la Cola')
+        ax2.set_xlim(0, self.simulation_time)
+        ax2.set_ylim(0, max(self.longitudes_cola_tiempo) + 1)
+        ax2.set_title('Longitud de la Cola')
+        ax2.set_xlabel('Tiempo (minutos)')
+        ax2.set_ylabel('Personas en Cola')
+        ax2.grid(True)
+        
+        tiempo_texto = ax1.text(0.02, 0.95, '', transform=ax1.transAxes)
+        
+        def init():
+            line.set_data([], [])
+            return list(bars) + [line, tiempo_texto]
+        
+        def update(frame):
+            tiempo_actual = self.tiempos[frame]
+            estado_actual = self.estados_cajas[frame]
+            
+            # Actualizar barras
+            for i, bar in enumerate(bars):
+                tiempo_restante = max(0, estado_actual[i] - tiempo_actual)
+                bar.set_height(tiempo_restante)
+                bar.set_color('red' if tiempo_restante > 0 else 'green')
+            
+            # Actualizar línea de cola
+            line.set_data(self.tiempos[:frame+1], self.longitudes_cola_tiempo[:frame+1])
+            
+            tiempo_texto.set_text(f'Tiempo: {tiempo_actual:.1f} min')
+            return list(bars) + [line, tiempo_texto]
+        
+        anim = FuncAnimation(
+            fig, 
+            update, 
+            init_func=init,
+            frames=len(self.tiempos),
+            interval=100,
+            repeat=True
+        )
+        
+        plt.tight_layout()
+        plt.show()
+        
+    def mostrar_resultados(self, tiempos_cola, tiempos_sistema, longitudes_cola, tiempos_servicio, utilizacion_cajas):
         # Calcular estadísticas
         print("\nEstadísticas de la simulación:")
         print(f"Tiempo promedio en cola: {np.mean(tiempos_cola):.2f} minutos")
@@ -105,16 +178,15 @@ class SimulacionSupermercado:
         plt.tight_layout()
         plt.show()
 
-# Configuración y ejecución con parámetros ajustados
-np.random.seed(42)
+# Parámetros de la simulación
+lambda_rate = 20 # Tasa de llegada de clientes por hora
+mu_rate = 20 # Tasa de servicio de cajas por hora
+num_cajas = 4 # Número de cajas en el supermercado
+tiempo_sim = 60 # Tiempo de simulación en minutos
+np.random.seed(42) # Semilla para reproducibilidad
 
-# Parámetros ajustados
-lambda_rate = 20  # 20 clientes por hora (1 cada 3 minutos en promedio)
-mu_rate = 20      # 20 clientes por hora por caja (1 cada 3 minutos en promedio)
-num_cajas = 4     # aumentado a 4 cajas
-tiempo_sim = 60   # 60 minutos de simulación
-
-# Crear y ejecutar simulación
+# Crear simulación y ejecutar
 sim = SimulacionSupermercado(lambda_rate, mu_rate, num_cajas, tiempo_sim)
 resultados = sim.simular()
-sim.mostrar_resultados(*resultados)
+#sim.mostrar_resultados(*resultados)
+sim.animar_cajas()
